@@ -1,108 +1,63 @@
-from cosmos_db import (
-    get_appointments_by_date,
-    get_appointment_mapping,
-    get_patient,
-    get_transcript
-)
+from app.services.cosmos_service import get_appointments_by_date, get_appointment_mapping
+from app.services.clinical_service import generate_clinical_response
+from app.prompts.prompts import QUESTION_MAP
 
-from azure_open_ai import ask_llm
+def main():
 
-from prompts import QUESTION_MAP
+    # Appointment Date
+    date = input("Enter Appointment Date (YYYY-MM-DD): ").strip()
 
+    if not get_appointments_by_date(date):
+        print("No appointment's found on given date")
+        exit()
 
-date = input(
-    "Enter Appointment Date (YYYY-MM-DD): "
-).strip()
-if not get_appointments_by_date(date):
-    print("No Appointment's found on given date")
-    exit()    
+    # Appointment ID
+    appointment_id = input("Enter Appointment ID: ").strip()
+    if not get_appointment_mapping(date, appointment_id):
+        print("No appointment found for the given appointment id")
+        exit()
 
-appointment_id = input(
-    "Enter Appointment ID: "
-).strip()
-if not get_appointment_mapping(date, appointment_id):
-    print("No appointment found for the given appointment id")
-    exit()
+    # Question selection
+    print("\nChoose Question: ")
 
+    print("1. Summary")
+    print("2. SOAP_Notes")
+    print("3. VBC_Notes")
+    print("4. Recommended_Tests")
+    print("5. Recommended_Medicines")
 
-print("\nChoose Question:")
+    choice = input("\nEnter Choice: ").strip()
 
-print("1. Summary")
-print("2. SOAP_Notes")
-print("3. VBC_Notes")
-print("4. Recommended_Tests")
-print("5. Recommended_Medicines")
+    if choice not in QUESTION_MAP:
+        print("Invalid Choice")
+        exit()
 
-choice = input(
-    "\nEnter Choice: "
-).strip()
+    # get selected Prompt
+    question_type = QUESTION_MAP[choice]
 
-if choice not in QUESTION_MAP:
-    print("Invalid Choice")
-    exit()
+    # Generate llm response
+    print("\n Generating Response...")
 
+    try:
+        response = generate_clinical_response(
+            appointment_date=date,
+            appointment_id=appointment_id,
+            question_type=question_type
+        )
+    except ValueError as error:
+        print(f"\nError: {error}")
+        return
+    except Exception as error:
+        print("\nAn unexpected error occured.")
+        print(f"Error: {error}")
+        return
 
-# Appointment Mapping
+    # Display response
+    print("\n")
+    print("=" * 50)
+    print(question_type.upper())
+    print("=" * 50)
+    print(response)
 
-appointment_mapping = get_appointment_mapping(
-    date=date,
-    appointment_id=appointment_id
-)
-
-if not appointment_mapping:
-    print("Appointment not found")
-    exit()
-
-
-patient_id = appointment_mapping["patient_id"]
-
-doctor_email = appointment_mapping["doctor_email"]
-
-firstname = appointment_mapping[ "firstname"]
-lastname = appointment_mapping[ "lastname"]
-email = appointment_mapping[ "email"]
-
-# Fetch Patient Data
-
-patient = get_patient(
-    patient_id, firstname, lastname, email
-    )
-
-if not patient:
-    print("Patient not found")
-    exit()
-
-
-
-# Fetch Transcript Data
-
-transcript = get_transcript(
-    doctor_email,
-    appointment_id
-)
-
-if not transcript:
-    print("Transcript not found")
-    exit()
-
-
-question_type = QUESTION_MAP[
-    choice
-]
-
-print("\nGenerating Response...")
-
-
-response = ask_llm(
-    question_type=question_type,
-    patient_data=patient,
-    transcript_data=transcript
-)
-
-
-print("\n")
-print("=" * 50)
-print(question_type.upper())
-print("=" * 50)
-
-print(response)
+if __name__ == "__main__":
+    main()
